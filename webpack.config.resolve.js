@@ -8,6 +8,7 @@ module.exports = {
   modules: [path.join(__dirname, 'app'), 'node_modules'],
   alias: {
     '@app': path.resolve(__dirname, 'app'),
+    '@assets': path.resolve(__dirname, 'app/assets'),
     '@components': path.resolve(__dirname, 'app/components'),
     '@config': path.resolve(__dirname, 'app/config'),
     '@constants': path.resolve(__dirname, 'app/constants'),

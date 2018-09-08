@@ -46,6 +46,10 @@ export default {
             cacheDirectory: true
           }
         }
+      },
+      {
+        test: /\.txt$/,
+        use: 'raw-loader'
       }
     ]
   },
