@@ -48,7 +48,7 @@ export default {
         }
       },
       {
-        test: /\.txt$/,
+        test: /\.(txt|scsc)$/,
         use: 'raw-loader'
       }
     ]
