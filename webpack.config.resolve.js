@@ -13,6 +13,7 @@ module.exports = {
     '@config': path.resolve(__dirname, 'app/config'),
     '@constants': path.resolve(__dirname, 'app/constants'),
     '@data': path.resolve(__dirname, 'app/data'),
+    '@lib': path.resolve(__dirname, 'app/lib'),
     '@models': path.resolve(__dirname, 'app/models'),
     '@utils': path.resolve(__dirname, 'app/utils')
   }
