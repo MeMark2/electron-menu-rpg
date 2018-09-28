@@ -1,16 +1,26 @@
 // @flow
 import React, { Component } from 'react';
-import { BrowserRouter as Router } from 'react-router-dom';
+import { Provider } from 'react-redux';
+import { ConnectedRouter } from 'react-router-redux';
+
+import type { Store } from '@reducers';
+
 import App from './App';
 
-type Props = {};
+type Props = {
+  store: Store,
+  history: {}
+};
 
 export default class Root extends Component<Props> {
   render() {
+    const { store, history } = this.props;
     return (
-      <Router>
-        <App />
-      </Router>
+      <Provider store={store}>
+        <ConnectedRouter history={history}>
+          <App />
+        </ConnectedRouter>
+      </Provider>
     );
   }
 }
