@@ -1,0 +1,204 @@
+{
+  function joinSecondElements(arr) {
+    return arr.map((element) => element[1]).join('');
+  }
+}
+
+root
+  = nodes:(node)* {
+    return nodes.reduce((acc, node) => {
+      // Null or undefined nodes are ignored.
+      if (node === null || node === undefined) {
+        return acc;
+      }
+
+      const len = acc.length;
+      if (len > 0) {
+        const lastNode = acc[len - 1];
+
+        if (node.type === "content" && lastNode.type === "content") {
+          // This joins the last two nodes if they are both content.
+          const jointContentNode = {
+            type: "content",
+            value: lastNode.value + node.value
+          };
+
+          acc[len - 1] = jointContentNode;
+          return acc;
+        }
+      }
+
+      acc.push(node);
+      return acc;
+    }, []);
+  }
+
+node
+  = comment / command / commandBlock / content
+
+comment
+  = "{{!" (! ("}}") .)* "}}" {
+    return null;
+  }
+
+command
+  = "{{" meta:commandMeta "}}" {
+    return {
+      ...meta,
+      type: "command"
+    };
+  }
+
+commandBlock
+  = firstCommand:blockOpen firstRoot:root splits:(splitWithRoot)* close:blockClose {
+  	if (close.name !== firstCommand.name) {
+  		error(`The block open ("${firstCommand.name}") does not match the block close ("${close.name}").`);
+  	}
+
+    const blocks = [
+      {
+        type: "block",
+        command: firstCommand,
+        root: firstRoot
+      },
+      ...splits
+     ];
+
+    return {
+      type: "blocks",
+      blocks
+    };
+  }
+
+splitWithRoot
+  = command:blockSplit root:root {
+    return {
+      type: "block",
+      command,
+      root
+    };
+  }
+
+blockOpen
+  = "{{#" meta:commandMeta "}}" {
+    return {
+      ...meta,
+      type: "blockOpen"
+    };
+  }
+
+blockSplit
+  = "{{^" meta:commandMeta "}}" {
+    return {
+      ...meta,
+      type: "blockSplit"
+    };
+  }
+
+blockClose
+  = "{{/" name:name "}}" {
+    return {
+      name,
+      type: "blockClose"
+    };
+  }
+
+commandMeta
+  = name:name params:params {
+    return {
+      name,
+      params
+    };
+  }
+
+params
+  = paramPairs:(" " param)* {
+    return paramPairs.map((element) => element[1]);
+  }
+
+param
+  = string / number / jsExpression / path
+
+string
+  = "\"" stringContent:("\\\"" / (! "\"") .)* "\"" {
+    let escapeNext = false;
+
+    return {
+      type: "string",
+      value: stringContent.reduce((res, element) => {
+        const char = element[1];
+        if (escapeNext) {
+          escapeNext = false;
+          switch(char) {
+            case "\\":
+              return res + "\\";
+            case "\"":
+              return res + "\"";
+          }
+        }
+
+        if (char === "\\") {
+          escapeNext = true;
+          return res;
+        }
+
+        return res + char;
+      }, "")
+    };
+  }
+
+number
+  = [0-9]+ ("." [0-9]+)? {
+    return {
+      type: "number",
+      value: Number(text())
+    };
+  }
+
+jsExpression
+  = "<%" expr:(! "%>" .)+ "%>" {
+    return {
+      type: "jsExpression",
+      value: joinSecondElements(expr)
+    };
+  }
+
+path
+  = name (getByName / getByIndex)* {
+    return {
+      type: "path",
+      value: text()
+    };
+  }
+
+getByName
+  = "." name
+
+getByIndex
+  = "[" name "]"
+
+name
+  = [A-Za-z_] [A-Za-z0-9_]* {
+    return text();
+  }
+
+content
+  = ("\\{{" / (! ("{{") .))+ {
+    const rawText = text();
+
+    if (rawText.trim() === "") {
+      return null;
+    }
+
+    if (rawText[0] === "\n") {
+      return {
+        type: "content",
+        value: rawText.slice(1)
+      };
+    }
+
+    return {
+      type: "content",
+      value: rawText
+    };
+  }
