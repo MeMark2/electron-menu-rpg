@@ -34,80 +34,183 @@ root
   }
 
 node
-  = comment / command / commandBlock / content
+  = comment / command / jsReturnExpression / jsExpression / content
 
 comment
-  = "{{!" (! ("}}") .)* "}}" {
+  = "{{!" (! ("}}") .)* "}}" consumeExtraNL {
     return null;
   }
 
 command
-  = "{{" meta:commandMeta "}}" {
+  = ifStatement / forStatement / forEachStatement / switchStatement / pageBreak / question / defineStatements
+
+// If Statement
+ifStatement
+  = condition:ifOpen root:root elseIfs:(elseIfStatement)* els:(elseStatement)? ifClose {
+    const conditionals = [
+      { condition, root },
+      ...elseIfs
+    ];
+
+    if (els !== null) {
+      conditionals.push(els);
+    }
+
     return {
-      ...meta,
-      type: "command"
+      type: "ifStatement",
+      conditionals
     };
   }
 
-commandBlock
-  = firstCommand:blockOpen firstRoot:root splits:(splitWithRoot)* close:blockClose {
-  	if (close.name !== firstCommand.name) {
-  		error(`The block open ("${firstCommand.name}") does not match the block close ("${close.name}").`);
-  	}
-
-    const blocks = [
-      {
-        type: "block",
-        command: firstCommand,
-        root: firstRoot
-      },
-      ...splits
-     ];
-
-    return {
-      type: "blocks",
-      blocks
-    };
+ifOpen
+  = "{{if " param:param "}}" consumeExtraNL {
+    return param;
   }
 
-splitWithRoot
-  = command:blockSplit root:root {
+elseIfStatement
+  = "{{else " condition:param "}}" consumeExtraNL root:root {
     return {
-      type: "block",
-      command,
+      condition: condition === null ? { type: "boolean", value: true } : condition,
       root
     };
   }
 
-blockOpen
-  = "{{#" meta:commandMeta "}}" {
+elseStatement
+  = "{{else}}" consumeExtraNL root:root {
     return {
+      condition: { type: "boolean", value: true },
+      root
+    };
+  }
+
+ifClose
+  = "{{endIf}}" consumeExtraNL
+
+// For statement
+forStatement
+  = meta:forOpen root:root forClose {
+    return {
+      type: "forStatement",
       ...meta,
-      type: "blockOpen"
+      root
     };
   }
 
-blockSplit
-  = "{{^" meta:commandMeta "}}" {
+forOpen
+  = "{{for " from:param " " to:param itemName:(" " string:string {return string;})? "}}" consumeExtraNL {
     return {
+      itemName: itemName === null ? "_item" : itemName.value,
+      from,
+      to
+    };
+  }
+
+forClose
+  = "{{endFor}}" consumeExtraNL
+
+// For each statement
+forEachStatement
+  = meta:forEachOpen root:root forEachClose {
+    return {
+      type: "forEachStatement",
       ...meta,
-      type: "blockSplit"
+      root
     };
   }
 
-blockClose
-  = "{{/" name:name "}}" {
+forEachOpen
+  = "{{forEach " iterable:param itemName:(" " string:string {return string;})? "}}" consumeExtraNL {
     return {
-      name,
-      type: "blockClose"
+      itemName: itemName === null ? "_item" : itemName.value,
+      iterable
     };
   }
 
-commandMeta
-  = name:name params:params {
+forEachClose
+  = "{{endForEach}}" consumeExtraNL
+
+// Switch statement
+switchStatement
+  = value:switchOpen [ \t\r\n]* cases:(switchCase)+ defaultCase:switchDefault? [ \t\r\n]* switchClose {
     return {
-      name,
-      params
+      type: "switchStatement",
+      value,
+      cases,
+      defaut: defaultCase
+    };
+  }
+
+switchOpen
+  = "{{switch " value:param "}}" consumeExtraNL {
+    return value;
+  }
+
+switchCase
+  = "{{case " match:param "}}" consumeExtraNL root:root {
+    return {
+    	match,
+        root
+    };
+  }
+
+switchDefault
+  = "{{default}}" consumeExtraNL root:root {
+    return root;
+  }
+
+switchClose
+  = "{{endSwitch}}" consumeExtraNL
+
+// Page Break
+pageBreak
+  = "{{pageBreak}}" consumeExtraNL { return { type: "pageBreak" }; }
+
+// Question
+question
+  = question:questionOpen options:questionOption+ questionClose {
+    return {
+      type: "question",
+      question,
+      options
+    };
+  }
+
+questionOpen
+  = "{{question}}" consumeExtraNL root:root {
+    return root;
+  }
+
+questionOption
+  = "{{option " label:param conditional:(" " con:param { return con; })? "}}" consumeExtraNL root:root {
+    return {
+      label,
+      conditional: conditional === null ? { type: "boolean", value: true } : conditional,
+      root
+    };
+  }
+
+questionClose
+  = "{{endQuestion}}" consumeExtraNL
+
+// Define Statements
+defineStatements
+  = defineStatement / setStatement
+
+defineStatement
+  = "{{define " name:string " " value:param "}}" consumeExtraNL {
+    return {
+      type: "defineStatement",
+      name: name.value,
+      value
+    };
+  }
+
+setStatement
+  = "{{set " name:string " " value:param "}}" consumeExtraNL {
+    return {
+      type: "setStatement",
+      name: name.value,
+      value
     };
   }
 
@@ -117,7 +220,7 @@ params
   }
 
 param
-  = string / number / jsExpression / path
+  = string / number / jsParamExpression / boolean
 
 string
   = "\"" stringContent:("\\\"" / (! "\"") .)* "\"" {
@@ -155,27 +258,34 @@ number
     };
   }
 
+boolean
+  = ("true" / "false") {
+    return {
+      type: "boolean",
+      value: text() === true
+    };
+  }
+
 jsExpression
-  = "<%" expr:(! "%>" .)+ "%>" {
+  = "<%" expr:(! "%>" .)+ "%>" consumeExtraNL {
     return {
       type: "jsExpression",
       value: joinSecondElements(expr)
     };
   }
 
-path
-  = name (getByName / getByIndex)* {
-    return {
-      type: "path",
-      value: text()
-    };
+jsReturnExpression
+  = expr:jsParamExpression consumeExtraNL {
+    return expr;
   }
 
-getByName
-  = "." name
-
-getByIndex
-  = "[" name "]"
+jsParamExpression
+  = "<%=" expr:(! "%>" .)+ "%>" {
+    return {
+      type: "jsReturnExpression",
+      value: joinSecondElements(expr)
+    };
+  }
 
 name
   = [A-Za-z_] [A-Za-z0-9_]* {
@@ -183,18 +293,11 @@ name
   }
 
 content
-  = ("\\{{" / (! ("{{") .))+ {
+  = ("\\{{" / (! ("{{" / "<%") .))+ {
     const rawText = text();
 
     if (rawText.trim() === "") {
       return null;
-    }
-
-    if (rawText[0] === "\n") {
-      return {
-        type: "content",
-        value: rawText.slice(1)
-      };
     }
 
     return {
@@ -202,3 +305,6 @@ content
       value: rawText
     };
   }
+
+consumeExtraNL
+  = "\n"?
